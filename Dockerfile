@@ -43,19 +43,18 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC && \
     git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify
 
 # Supervisor config
-RUN mkdir -p /etc/supervisor/conf.d
-RUN echo "[supervisord]
-nodaemon=true
-
-[program:vnc]
-command=/usr/bin/vncserver :1 -geometry 1280x720 -localhost no
-user=user
-
-[program:novnc]
-command=/opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080
-directory=/opt/noVNC
-user=user
-" > /etc/supervisor/conf.d/supervisor.conf
+RUN mkdir -p /etc/supervisor/conf.d && \
+    echo "[supervisord]\n\
+nodaemon=true\n\
+\n\
+[program:vnc]\n\
+command=/usr/bin/vncserver :1 -geometry 1280x720 -localhost no\n\
+user=user\n\
+\n\
+[program:novnc]\n\
+command=/opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080\n\
+directory=/opt/noVNC\n\
+user=user\n" > /etc/supervisor/conf.d/supervisor.conf
 
 # Expose noVNC port
 EXPOSE 8080
