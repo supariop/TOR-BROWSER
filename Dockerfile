@@ -25,14 +25,14 @@ RUN wget https://www.torproject.org/dist/torbrowser/14.0.1/tor-browser-linux-x86
 RUN useradd -m -s /bin/bash user && \
     echo "user:user" | chpasswd && \
     mkdir -p /home/user/.vnc && \
-    printf "SUPARI\nSUPARI\n" | vncpasswd -f > /home/user/.vnc/passwd && \
+    printf "Clown80990@\nClown80990@\n" | vncpasswd -f > /home/user/.vnc/passwd && \
     chown -R user:user /home/user/.vnc && \
     chmod 600 /home/user/.vnc/passwd
 
 # VNC xstartup
 RUN bash -c "cat > /home/user/.vnc/xstartup << 'EOF'\n\
 #!/bin/bash\n\
-xrdb $HOME/.Xresources\n\
+xrdb \$HOME/.Xresources\n\
 startxfce4 &\n\
 EOF"
 
@@ -43,21 +43,22 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC && \
     git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify
 
 # Supervisor config
-RUN bash -c \"cat > /etc/supervisor/conf.d/supervisor.conf << 'EOF'\n\
-[supervisord]\n\
-nodaemon=true\n\
-\n\
-[program:vnc]\n\
-command=/usr/bin/vncserver :1 -geometry 1280x720 -localhost no\n\
-user=user\n\
-\n\
-[program:novnc]\n\
-command=/opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080\n\
-directory=/opt/noVNC\n\
-user=user\n\
-\n\
-EOF\"
+RUN mkdir -p /etc/supervisor/conf.d
+RUN echo "[supervisord]
+nodaemon=true
 
+[program:vnc]
+command=/usr/bin/vncserver :1 -geometry 1280x720 -localhost no
+user=user
+
+[program:novnc]
+command=/opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080
+directory=/opt/noVNC
+user=user
+" > /etc/supervisor/conf.d/supervisor.conf
+
+# Expose noVNC port
 EXPOSE 8080
 
-CMD [\"/usr/bin/supervisord\"]
+# Start supervisor
+CMD ["/usr/bin/supervisord"]
