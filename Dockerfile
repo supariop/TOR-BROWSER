@@ -28,17 +28,19 @@ RUN mkdir -p /home/user/.vnc && \
     x11vnc -storepasswd "Clown80990@" /home/user/.vnc/passwd && \
     chown -R user:user /home/user/.vnc
 
-# Create xstartup file (FIXED – no Docker parse errors)
-RUN bash -c 'cat << EOF > /home/user/.vnc/xstartup
+# Create xstartup (NO INDENTATION VERSION — FIXED)
+RUN cat << 'EOF' > /home/user/.vnc/xstartup
 #!/bin/bash
-xrdb \$HOME/.Xresources
+xrdb $HOME/.Xresources
 startxfce4 &
-EOF'
+EOF
+
 RUN chmod +x /home/user/.vnc/xstartup
 
-# Supervisor config (FIXED HEREDOC)
-RUN mkdir -p /etc/supervisor/conf.d && \
-    bash -c 'cat << EOF > /etc/supervisor/conf.d/supervisord.conf
+# Supervisor config (ALSO NO INDENTATION — FIXED)
+RUN mkdir -p /etc/supervisor/conf.d
+
+RUN cat << 'EOF' > /etc/supervisor/conf.d/supervisord.conf
 [supervisord]
 nodaemon=true
 
@@ -52,8 +54,7 @@ command=/usr/share/novnc/utils/launch.sh --vnc localhost:5901 --listen 10000
 directory=/usr/share/novnc
 user=user
 autorestart=true
-EOF'
+EOF
 
 EXPOSE 10000
-
 CMD ["/usr/bin/supervisord"]
