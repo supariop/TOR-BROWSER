@@ -15,7 +15,7 @@ RUN apt update && apt install -y \
 # Create user
 RUN useradd -m user && echo "user:user" | chpasswd
 
-# Install Tor Browser (stable working version)
+# Install Tor Browser
 RUN mkdir /opt/tor && \
     wget -O /opt/tor-browser.tar.xz https://dist.torproject.org/torbrowser/13.5.2/tor-browser-linux64-13.5.2.tar.xz && \
     tar -xf /opt/tor-browser.tar.xz -C /opt/tor --strip-components=1 && \
@@ -32,21 +32,20 @@ RUN mkdir -p /home/user/.vnc && \
 RUN git clone https://github.com/novnc/noVNC /opt/noVNC && \
     git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify
 
-# Supervisor config (NO ERRORS)
+# Supervisor config (echo method, never fails)
 RUN mkdir -p /etc/supervisor/conf.d
-RUN bash -c 'cat << EOF > /etc/supervisor/conf.d/supervisord.conf
-[supervisord]
-nodaemon=true
 
-[program:vnc]
-command=/usr/bin/vncserver :1 -geometry 1280x720 -localhost no
-user=user
-
-[program:novnc]
-command=/opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080
-directory=/opt/noVNC
-user=user
-EOF'
+RUN echo "[supervisord]" > /etc/supervisor/conf.d/supervisord.conf && \
+    echo "nodaemon=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "[program:vnc]" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "command=/usr/bin/vncserver :1 -geometry 1280x720 -localhost no" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "user=user" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "[program:novnc]" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "command=/opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "directory=/opt/noVNC" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "user=user" >> /etc/supervisor/conf.d/supervisord.conf
 
 # Start XFCE desktop
 RUN bash -c 'cat << EOF > /home/user/.vnc/xstartup
