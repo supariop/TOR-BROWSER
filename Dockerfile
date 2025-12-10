@@ -2,55 +2,59 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install dependencies
-RUN apt update && apt install -y \
+# Install required packages
+RUN apt-get update && apt-get install -y \
     xfce4 xfce4-goodies \
-    tigervnc-standalone-server tigervnc-common \
-    novnc websockify git wget curl supervisor \
-    dbus-x11 x11-xserver-utils python3 python3-pip \
-    && apt clean
+    x11vnc xvfb \
+    supervisor \
+    wget curl \
+    novnc websockify \
+    tigervnc-standalone-server \
+    dbus-x11 \
+    && apt-get clean
 
 # Create user
-RUN useradd -m user && echo "user:user" | chpasswd
+RUN useradd -m user && echo "user:user" | chpasswd && adduser user sudo
 
-# Install Tor Browser (valid URL – checked)
+# Install Tor Browser (VALID URL)
 RUN mkdir /opt/tor && \
-    wget -O /opt/tor-browser.tar.xz https://dist.torproject.org/torbrowser/15.0.1/tor-browser-linux-x86_64-15.0.1.tar.xz && \
+    wget -O /opt/tor-browser.tar.xz https://dist.torproject.org/torbrowser/13.0.13/tor-browser-linux-x86_64-13.0.13.tar.xz && \
     tar -xf /opt/tor-browser.tar.xz -C /opt/tor --strip-components=1 && \
     rm /opt/tor-browser.tar.xz && \
     chown -R user:user /opt/tor
 
-# VNC password
+# Set VNC password
 RUN mkdir -p /home/user/.vnc && \
-    echo "Clown80990@" | vncpasswd -f > /home/user/.vnc/passwd && \
-    chmod 600 /home/user/.vnc/passwd && \
+    x11vnc -storepasswd "Clown80990@" /home/user/.vnc/passwd && \
     chown -R user:user /home/user/.vnc
 
-# Install noVNC
-RUN git clone https://github.com/novnc/noVNC /opt/noVNC && \
-    git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify
+# Create startup script
+RUN bash -c 'cat << EOF > /home/user/.vnc/xstartup
+#!/bin/bash
+xrdb $HOME/.Xresources
+startxfce4 &
+EOF'
+RUN chmod +x /home/user/.vnc/xstartup && chown -R user:user /home/user/.vnc
 
 # Supervisor config
 RUN mkdir -p /etc/supervisor/conf.d && \
-    echo "[supervisord]" > /etc/supervisor/conf.d/supervisord.conf && \
-    echo "nodaemon=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "[program:vnc]" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "command=/usr/bin/vncserver :1 -geometry 1280x720 -localhost no" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "user=user" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "[program:novnc]" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "command=/opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "directory=/opt/noVNC" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "user=user" >> /etc/supervisor/conf.d/supervisord.conf
+    bash -c 'cat << EOF > /etc/supervisor/conf.d/supervisord.conf
+[supervisord]
+nodaemon=true
 
-# xstartup
-RUN echo "#!/bin/bash" > /home/user/.vnc/xstartup && \
-    echo "xrdb \$HOME/.Xresources" >> /home/user/.vnc/xstartup && \
-    echo "startxfce4 &" >> /home/user/.vnc/xstartup && \
-    chmod +x /home/user/.vnc/xstartup && \
-    chown user:user /home/user/.vnc/xstartup
+[program:vnc]
+command=/usr/bin/x11vnc -forever -usepw -create -display :1 -rfbport 5901
+user=user
+priority=1
+autorestart=true
+
+[program:novnc]
+command=/usr/share/novnc/utils/launch.sh --vnc localhost:5901 --listen 8080
+directory=/usr/share/novnc
+user=user
+priority=2
+autorestart=true
+EOF'
 
 EXPOSE 8080
-
 CMD ["/usr/bin/supervisord"]
