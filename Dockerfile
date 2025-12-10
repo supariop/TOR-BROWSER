@@ -32,7 +32,7 @@ RUN mkdir -p /home/user/.vnc && \
 RUN git clone https://github.com/novnc/noVNC /opt/noVNC && \
     git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify
 
-# Supervisor config (echo method, never fails)
+# Supervisor config (SAFE echo only)
 RUN mkdir -p /etc/supervisor/conf.d
 
 RUN echo "[supervisord]" > /etc/supervisor/conf.d/supervisord.conf && \
@@ -47,14 +47,12 @@ RUN echo "[supervisord]" > /etc/supervisor/conf.d/supervisord.conf && \
     echo "directory=/opt/noVNC" >> /etc/supervisor/conf.d/supervisord.conf && \
     echo "user=user" >> /etc/supervisor/conf.d/supervisord.conf
 
-# Start XFCE desktop
-RUN bash -c 'cat << EOF > /home/user/.vnc/xstartup
-#!/bin/bash
-xrdb $HOME/.Xresources
-startxfce4 &
-EOF'
-
-RUN chmod +x /home/user/.vnc/xstartup && chown user:user /home/user/.vnc/xstartup
+# xstartup (NO HEREDOC)
+RUN echo "#!/bin/bash" > /home/user/.vnc/xstartup && \
+    echo "xrdb \$HOME/.Xresources" >> /home/user/.vnc/xstartup && \
+    echo "startxfce4 &" >> /home/user/.vnc/xstartup && \
+    chmod +x /home/user/.vnc/xstartup && \
+    chown user:user /home/user/.vnc/xstartup
 
 EXPOSE 8080
 
