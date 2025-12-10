@@ -1,63 +1,57 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV DISPLAY=:1
 
 # Install packages
 RUN apt update && apt install -y \
-    wget curl sudo \
     xfce4 xfce4-goodies \
-    tigervnc-standalone-server \
-    dbus-x11 \
-    xauth x11-xserver-utils \
-    python3 net-tools \
-    supervisor \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+    tigervnc-standalone-server tigervnc-common \
+    novnc websockify \
+    supervisor wget curl git \
+    dbus-x11 x11-xserver-utils \
+    python3 python3-pip \
+    && apt clean
 
-# Install Tor Browser
-RUN wget https://www.torproject.org/dist/torbrowser/14.0.1/tor-browser-linux-x86_64-14.0.1.tar.xz -O /tmp/tor.tar.xz && \
-    tar -xf /tmp/tor.tar.xz -C /opt && \
-    mv /opt/tor-browser* /opt/tor-browser && \
-    rm /tmp/tor.tar.xz
+# Create user
+RUN useradd -m user && echo "user:user" | chpasswd
 
-# Create VNC user and set password
-RUN useradd -m -s /bin/bash user && \
-    echo "user:user" | chpasswd && \
-    mkdir -p /home/user/.vnc && \
-    printf "Clown80990@\nClown80990@\n" | vncpasswd -f > /home/user/.vnc/passwd && \
-    chown -R user:user /home/user/.vnc && \
-    chmod 600 /home/user/.vnc/passwd
+# Install Tor Browser (stable working version)
+RUN mkdir /opt/tor && \
+    wget -O /opt/tor-browser.tar.xz https://dist.torproject.org/torbrowser/13.5.2/tor-browser-linux64-13.5.2.tar.xz && \
+    tar -xf /opt/tor-browser.tar.xz -C /opt/tor --strip-components=1 && \
+    rm /opt/tor-browser.tar.xz && \
+    chown -R user:user /opt/tor
 
-# VNC xstartup
-RUN bash -c "cat > /home/user/.vnc/xstartup << 'EOF'\n\
-#!/bin/bash\n\
-xrdb \$HOME/.Xresources\n\
-startxfce4 &\n\
-EOF"
-
-RUN chmod +x /home/user/.vnc/xstartup
+# Setup VNC password
+RUN mkdir -p /home/user/.vnc && \
+    echo "Clown80990@" | vncpasswd -f > /home/user/.vnc/passwd && \
+    chmod 600 /home/user/.vnc/passwd && \
+    chown -R user:user /home/user/.vnc
 
 # Install noVNC
-RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC && \
+RUN git clone https://github.com/novnc/noVNC /opt/noVNC && \
     git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify
 
-# Supervisor config
-RUN mkdir -p /etc/supervisor/conf.d && \
-    echo "[supervisord]\n\
-nodaemon=true\n\
-\n\
-[program:vnc]\n\
-command=/usr/bin/vncserver :1 -geometry 1280x720 -localhost no\n\
-user=user\n\
-\n\
-[program:novnc]\n\
-command=/opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080\n\
-directory=/opt/noVNC\n\
-user=user\n" > /etc/supervisor/conf.d/supervisor.conf
-
-# Expose noVNC port
 EXPOSE 8080
 
-# Start supervisor
+# Supervisor configuration
+RUN bash -c "cat > /etc/supervisor/conf.d/supervisord.conf << 'EOF'
+[supervisord]
+nodaemon=true
+
+[program:vnc]
+command=/usr/bin/vncserver :1 -geometry 1280x720 -localhost no
+user=user
+
+[program:novnc]
+command=/opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080
+directory=/opt/noVNC
+user=user
+EOF"
+
+# Start XFCE desktop
+RUN bash -c "echo '#!/bin/bash\nstartxfce4 &' > /home/user/.vnc/xstartup" && \
+    chmod +x /home/user/.vnc/xstartup && \
+    chown user:user /home/user/.vnc/xstartup
+
 CMD ["/usr/bin/supervisord"]
