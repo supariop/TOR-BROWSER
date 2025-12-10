@@ -2,7 +2,7 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install packages
+# Install dependencies
 RUN apt update && apt install -y \
     xfce4 xfce4-goodies \
     tigervnc-standalone-server tigervnc-common \
@@ -22,7 +22,7 @@ RUN mkdir /opt/tor && \
     rm /opt/tor-browser.tar.xz && \
     chown -R user:user /opt/tor
 
-# Setup VNC password
+# Set VNC password
 RUN mkdir -p /home/user/.vnc && \
     echo "Clown80990@" | vncpasswd -f > /home/user/.vnc/passwd && \
     chmod 600 /home/user/.vnc/passwd && \
@@ -32,10 +32,9 @@ RUN mkdir -p /home/user/.vnc && \
 RUN git clone https://github.com/novnc/noVNC /opt/noVNC && \
     git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify
 
-EXPOSE 8080
-
-# Supervisor configuration
-RUN bash -c "cat > /etc/supervisor/conf.d/supervisord.conf << 'EOF'
+# Supervisor config (NO ERRORS)
+RUN mkdir -p /etc/supervisor/conf.d
+RUN bash -c 'cat << EOF > /etc/supervisor/conf.d/supervisord.conf
 [supervisord]
 nodaemon=true
 
@@ -47,11 +46,17 @@ user=user
 command=/opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080
 directory=/opt/noVNC
 user=user
-EOF"
+EOF'
 
 # Start XFCE desktop
-RUN bash -c "echo '#!/bin/bash\nstartxfce4 &' > /home/user/.vnc/xstartup" && \
-    chmod +x /home/user/.vnc/xstartup && \
-    chown user:user /home/user/.vnc/xstartup
+RUN bash -c 'cat << EOF > /home/user/.vnc/xstartup
+#!/bin/bash
+xrdb $HOME/.Xresources
+startxfce4 &
+EOF'
+
+RUN chmod +x /home/user/.vnc/xstartup && chown user:user /home/user/.vnc/xstartup
+
+EXPOSE 8080
 
 CMD ["/usr/bin/supervisord"]
