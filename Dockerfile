@@ -1,60 +1,81 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV DISPLAY=:1
+ENV USER=user
+ENV HOME=/home/user
 
-# Install packages
+# Install minimal packages
 RUN apt-get update && apt-get install -y \
-    xfce4 xfce4-goodies \
-    x11vnc xvfb \
+    openbox \
+    xterm \
     tigervnc-standalone-server \
-    novnc websockify \
-    supervisor \
-    wget curl \
+    tigervnc-common \
+    x11-xserver-utils \
+    xfonts-base \
+    wget \
+    curl \
+    ca-certificates \
+    git \
+    python3 \
     dbus-x11 \
-    && apt-get clean
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create user
-RUN useradd -m user && echo "user:user" | chpasswd
+# Create non-root user
+RUN useradd -m -s /bin/bash $USER
 
-# Install Tor Browser (VALID URL)
-RUN mkdir /opt/tor && \
-    wget -O /opt/tor-browser.tar.xz https://dist.torproject.org/torbrowser/13.0.13/tor-browser-linux-x86_64-13.0.13.tar.xz && \
-    tar -xf /opt/tor-browser.tar.xz -C /opt/tor --strip-components=1 && \
-    rm /opt/tor-browser.tar.xz && \
-    chown -R user:user /opt/tor
+# Download Tor Browser (official)
+RUN wget -q https://www.torproject.org/dist/torbrowser/13.0.10/tor-browser-linux64-13.0.10.tar.xz \
+    && tar -xf tor-browser-linux64-13.0.10.tar.xz \
+    && mv tor-browser $HOME/tor-browser \
+    && rm tor-browser-linux64-13.0.10.tar.xz \
+    && chown -R $USER:$USER $HOME/tor-browser
+
+# Install noVNC
+RUN git clone https://github.com/novnc/noVNC.git /opt/novnc \
+    && git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify
+
+# VNC + Openbox startup
+RUN mkdir -p $HOME/.vnc && \
+    echo '#!/bin/sh\nunset SESSION_MANAGER\nunset DBUS_SESSION_BUS_ADDRESS\nexec openbox-session &' \
+    > $HOME/.vnc/xstartup && \
+    chmod +x $HOME/.vnc/xstartup && \
+    chown -R $USER:$USER $HOME/.vnc
+
+# ---- Tor Browser LOW-RAM tuning ----
+RUN mkdir -p $HOME/.tor-browser-profile && \
+    echo '\
+user_pref("media.autoplay.default", 5);\n\
+user_pref("media.ffmpeg.enabled", false);\n\
+user_pref("media.webrtc.enabled", false);\n\
+user_pref("browser.cache.memory.enable", false);\n\
+user_pref("browser.sessionstore.interval", 600000);\n\
+user_pref("ui.prefersReducedMotion", 1);\n\
+user_pref("dom.ipc.processCount", 1);\n' \
+    > $HOME/.tor-browser-profile/user.js && \
+    chown -R $USER:$USER $HOME/.tor-browser-profile
+
+# Switch to user
+USER $USER
+WORKDIR $HOME
 
 # Set VNC password
-RUN mkdir -p /home/user/.vnc && \
-    x11vnc -storepasswd "Clown80990@" /home/user/.vnc/passwd && \
-    chown -R user:user /home/user/.vnc
+RUN printf "password\npassword\n\n" | vncpasswd
 
-# Create xstartup (NO INDENTATION VERSION — FIXED)
-RUN cat << 'EOF' > /home/user/.vnc/xstartup
-#!/bin/bash
-xrdb $HOME/.Xresources
-startxfce4 &
-EOF
+# Expose noVNC only
+EXPOSE 6080
 
-RUN chmod +x /home/user/.vnc/xstartup
-
-# Supervisor config (ALSO NO INDENTATION — FIXED)
-RUN mkdir -p /etc/supervisor/conf.d
-
-RUN cat << 'EOF' > /etc/supervisor/conf.d/supervisord.conf
-[supervisord]
-nodaemon=true
-
-[program:vnc]
-command=/usr/bin/x11vnc -forever -usepw -create -display :1 -rfbport 5901
-user=user
-autorestart=true
-
-[program:novnc]
-command=/usr/share/novnc/utils/launch.sh --vnc localhost:5901 --listen 10000
-directory=/usr/share/novnc
-user=user
-autorestart=true
-EOF
-
-EXPOSE 10000
-CMD ["/usr/bin/supervisord"]
+# Start everything (with low-RAM flags)
+CMD vncserver :1 -geometry 1280x720 -depth 24 && \
+    sleep 2 && \
+    TOR_SKIP_LAUNCH=1 \
+    $HOME/tor-browser/Browser/firefox \
+      --profile $HOME/.tor-browser-profile \
+      --disable-gpu \
+      --no-sandbox \
+      --disable-dev-shm-usage \
+      & \
+    /opt/novnc/utils/novnc_proxy \
+      --vnc localhost:5901 \
+      --listen 0.0.0.0:6080
