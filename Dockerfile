@@ -1,85 +1,64 @@
-FROM ubuntu:22.04
+# Use a slim Debian base
+FROM debian:stable-slim
 
+# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
-ENV DISPLAY=:1
-ENV USER=user
-ENV HOME=/home/user
+ENV SCREEN_RESOLUTION=1280x720
+ENV DISPLAY=:99
 
-# ------------------------------
-# Install required packages
-# ------------------------------
-RUN apt-get update && apt-get install -y \
+# Install dependencies
+# We removed 'novnc' from apt and added 'git' and 'net-tools' to get the latest version manually
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xvfb \
+    x11vnc \
     openbox \
-    xterm \
-    tigervnc-standalone-server \
-    tigervnc-common \
-    x11-xserver-utils \
-    xfonts-base \
-    torbrowser-launcher \
-    wget \
+    python3-websockify \
+    python3-numpy \
     curl \
-    ca-certificates \
     git \
-    python3 \
-    dbus-x11 \
-    netcat \
-    && apt-get clean \
+    ca-certificates \
+    gpg \
+    xz-utils \
+    libgtk-3-0 \
+    libdbus-glib-1-2 \
+    libxt6 \
+    libx11-xcb1 \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
-# ------------------------------
-# Create non-root user
-# ------------------------------
-RUN useradd -m -s /bin/bash user
+# Create a non-root user
+RUN useradd -m -s /bin/bash toruser
 
-# ------------------------------
-# Install noVNC + websockify
-# ------------------------------
-RUN git clone https://github.com/novnc/noVNC.git /opt/novnc && \
-    git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify
+# Setup directories and download LATEST noVNC directly from GitHub
+# The apt version is often old; this ensures you get the best mobile support
+RUN mkdir -p /app && \
+    git clone --depth 1 https://github.com/novnc/noVNC.git /app/novnc && \
+    git clone --depth 1 https://github.com/novnc/websockify /app/novnc/utils/websockify && \
+    cp /app/novnc/vnc.html /app/novnc/index.html
 
-# ------------------------------
-# VNC + Openbox startup config (FIXED)
-# ------------------------------
-RUN mkdir -p /home/user/.vnc && \
-    cat << 'EOF' > /home/user/.vnc/xstartup
-#!/bin/sh
-unset SESSION_MANAGER
-unset DBUS_SESSION_BUS_ADDRESS
-exec openbox-session
-EOF
-RUN chmod +x /home/user/.vnc/xstartup && \
-    chown -R user:user /home/user/.vnc
+# --- KEYBOARD FIX ---
+# This 'sed' command injects a large floating Keyboard button into the HTML
+RUN sed -i 's|</body>| \
+<div id="mobile-keyboard-toggle" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;"> \
+  <button type="button" onclick="document.getElementById('\''noVNC_keyboard_button'\'').click()" \
+  style="padding: 15px 20px; font-size: 24px; background: #007bff; color: white; border: none; border-radius: 50px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);"> \
+  ⌨️ Keyboard \
+  </button> \
+</div> \
+</body>|' /app/novnc/index.html
 
-# ------------------------------
-# Switch to non-root user
-# ------------------------------
-USER user
-WORKDIR /home/user
+# Download and Install Tor Browser
+USER toruser
+WORKDIR /home/toruser
 
-# ------------------------------
-# Set VNC password safely
-# Password: Clown80990@
-# ------------------------------
-RUN mkdir -p /home/user/.vnc && \
-    printf "Clown80990@\nClown80990@\n\n" | vncpasswd && \
-    chmod 600 /home/user/.vnc/passwd
+RUN curl -sLO https://www.torproject.org/dist/torbrowser/14.0.3/tor-browser-linux-x86_64-14.0.3.tar.xz \
+    && tar -xf tor-browser-linux-x86_64-14.0.3.tar.xz \
+    && rm tor-browser-linux-x86_64-14.0.3.tar.xz
 
-# ------------------------------
-# Expose noVNC port
-# ------------------------------
-EXPOSE 6080
+# Copy the start script
+COPY --chown=toruser:toruser start.sh /home/toruser/start.sh
+RUN chmod +x /home/toruser/start.sh
 
-# ------------------------------
-# Start VNC → wait → noVNC → Tor Browser
-# ------------------------------
-CMD bash -c "\
-vncserver :1 -geometry 1280x720 -depth 24 && \
-echo 'Waiting for VNC to be ready...' && \
-while ! nc -z localhost 5901; do sleep 1; done && \
-echo 'Starting noVNC...' && \
-/opt/novnc/utils/novnc_proxy \
-  --vnc localhost:5901 \
-  --listen 0.0.0.0:6080 \
-  --web /opt/novnc & \
-echo 'Starting Tor Browser...' && \
-torbrowser-launcher"
+EXPOSE 8080
+
+CMD ["/home/toruser/start.sh"]
