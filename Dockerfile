@@ -5,7 +5,9 @@ ENV DISPLAY=:1
 ENV USER=user
 ENV HOME=/home/user
 
-# Install minimal packages
+# ------------------------------
+# Install minimal required packages
+# ------------------------------
 RUN apt-get update && apt-get install -y \
     openbox \
     xterm \
@@ -22,29 +24,40 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# ------------------------------
 # Create non-root user
-RUN useradd -m -s /bin/bash $USER
+# ------------------------------
+RUN useradd -m -s /bin/bash user
 
-# Download Tor Browser (official)
-RUN wget -q https://www.torproject.org/dist/torbrowser/13.0.10/tor-browser-linux64-13.0.10.tar.xz \
-    && tar -xf tor-browser-linux64-13.0.10.tar.xz \
-    && mv tor-browser $HOME/tor-browser \
-    && rm tor-browser-linux64-13.0.10.tar.xz \
-    && chown -R $USER:$USER $HOME/tor-browser
+# ------------------------------
+# Download LATEST Tor Browser (dynamic, stable URL)
+# ------------------------------
+RUN cd /tmp && \
+    wget https://www.torproject.org/dist/torbrowser/linux/tor-browser-linux64.tar.xz && \
+    tar -xf tor-browser-linux64.tar.xz && \
+    mv tor-browser /home/user/tor-browser && \
+    rm tor-browser-linux64.tar.xz && \
+    chown -R user:user /home/user/tor-browser
 
-# Install noVNC
-RUN git clone https://github.com/novnc/noVNC.git /opt/novnc \
-    && git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify
+# ------------------------------
+# Install noVNC + websockify
+# ------------------------------
+RUN git clone https://github.com/novnc/noVNC.git /opt/novnc && \
+    git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify
 
-# VNC + Openbox startup
-RUN mkdir -p $HOME/.vnc && \
+# ------------------------------
+# VNC + Openbox startup config
+# ------------------------------
+RUN mkdir -p /home/user/.vnc && \
     echo '#!/bin/sh\nunset SESSION_MANAGER\nunset DBUS_SESSION_BUS_ADDRESS\nexec openbox-session &' \
-    > $HOME/.vnc/xstartup && \
-    chmod +x $HOME/.vnc/xstartup && \
-    chown -R $USER:$USER $HOME/.vnc
+    > /home/user/.vnc/xstartup && \
+    chmod +x /home/user/.vnc/xstartup && \
+    chown -R user:user /home/user/.vnc
 
-# ---- Tor Browser LOW-RAM tuning ----
-RUN mkdir -p $HOME/.tor-browser-profile && \
+# ------------------------------
+# LOW-RAM Tor Browser tuning (safe)
+# ------------------------------
+RUN mkdir -p /home/user/.tor-browser-profile && \
     echo '\
 user_pref("media.autoplay.default", 5);\n\
 user_pref("media.ffmpeg.enabled", false);\n\
@@ -53,25 +66,33 @@ user_pref("browser.cache.memory.enable", false);\n\
 user_pref("browser.sessionstore.interval", 600000);\n\
 user_pref("ui.prefersReducedMotion", 1);\n\
 user_pref("dom.ipc.processCount", 1);\n' \
-    > $HOME/.tor-browser-profile/user.js && \
-    chown -R $USER:$USER $HOME/.tor-browser-profile
+    > /home/user/.tor-browser-profile/user.js && \
+    chown -R user:user /home/user/.tor-browser-profile
 
+# ------------------------------
 # Switch to user
-USER $USER
-WORKDIR $HOME
+# ------------------------------
+USER user
+WORKDIR /home/user
 
-# Set VNC password
+# ------------------------------
+# Set VNC password (CHANGE THIS)
+# ------------------------------
 RUN printf "password\npassword\n\n" | vncpasswd
 
-# Expose noVNC only
+# ------------------------------
+# Expose only noVNC (VNC stays internal)
+# ------------------------------
 EXPOSE 6080
 
-# Start everything (with low-RAM flags)
+# ------------------------------
+# Start Openbox + Tuned Tor + noVNC
+# ------------------------------
 CMD vncserver :1 -geometry 1280x720 -depth 24 && \
     sleep 2 && \
     TOR_SKIP_LAUNCH=1 \
-    $HOME/tor-browser/Browser/firefox \
-      --profile $HOME/.tor-browser-profile \
+    /home/user/tor-browser/Browser/firefox \
+      --profile /home/user/.tor-browser-profile \
       --disable-gpu \
       --no-sandbox \
       --disable-dev-shm-usage \
