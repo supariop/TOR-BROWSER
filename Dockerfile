@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y \
 # ------------------------------
 # Create non-root user
 # ------------------------------
-RUN useradd -m -s /bin/bash $USER
+RUN useradd -m -s /bin/bash user
 
 # ------------------------------
 # Install noVNC + websockify
@@ -38,29 +38,31 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/novnc && \
     git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify
 
 # ------------------------------
-# VNC + Openbox startup config
+# VNC + Openbox startup config (FIXED)
 # ------------------------------
-RUN mkdir -p $HOME/.vnc && \
-    echo '#!/bin/sh
+RUN mkdir -p /home/user/.vnc && \
+    cat << 'EOF' > /home/user/.vnc/xstartup
+#!/bin/sh
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
-exec openbox-session' > $HOME/.vnc/xstartup && \
-    chmod +x $HOME/.vnc/xstartup && \
-    chown -R $USER:$USER $HOME/.vnc
+exec openbox-session
+EOF
+RUN chmod +x /home/user/.vnc/xstartup && \
+    chown -R user:user /home/user/.vnc
 
 # ------------------------------
 # Switch to non-root user
 # ------------------------------
-USER $USER
-WORKDIR $HOME
+USER user
+WORKDIR /home/user
 
 # ------------------------------
 # Set VNC password safely
 # Password: Clown80990@
 # ------------------------------
-RUN mkdir -p $HOME/.vnc && \
+RUN mkdir -p /home/user/.vnc && \
     printf "Clown80990@\nClown80990@\n\n" | vncpasswd && \
-    chmod 600 $HOME/.vnc/passwd
+    chmod 600 /home/user/.vnc/passwd
 
 # ------------------------------
 # Expose noVNC port
@@ -75,6 +77,9 @@ vncserver :1 -geometry 1280x720 -depth 24 && \
 echo 'Waiting for VNC to be ready...' && \
 while ! nc -z localhost 5901; do sleep 1; done && \
 echo 'Starting noVNC...' && \
-/opt/novnc/utils/novnc_proxy --vnc localhost:5901 --listen 0.0.0.0:6080 --web /opt/novnc & \
+/opt/novnc/utils/novnc_proxy \
+  --vnc localhost:5901 \
+  --listen 0.0.0.0:6080 \
+  --web /opt/novnc & \
 echo 'Starting Tor Browser...' && \
 torbrowser-launcher"
