@@ -15,13 +15,13 @@ RUN apt-get update && apt-get install -y \
     tigervnc-common \
     x11-xserver-utils \
     xfonts-base \
+    torbrowser-launcher \
     wget \
     curl \
     ca-certificates \
     git \
     python3 \
     dbus-x11 \
-    jq \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -29,21 +29,6 @@ RUN apt-get update && apt-get install -y \
 # Create non-root user
 # -------------------------------------------------
 RUN useradd -m -s /bin/bash user
-
-# -------------------------------------------------
-# Download LATEST Tor Browser (API-based, future-proof)
-# -------------------------------------------------
-RUN set -eux; \
-    cd /tmp; \
-    TOR_URL=$(curl -s https://aus1.torproject.org/torbrowser/update_3/release/downloads.json \
-      | jq -r '.downloads.linux64[] | select(.binary=="tor-browser-linux64") | .url' \
-      | head -n 1); \
-    echo "Downloading: $TOR_URL"; \
-    wget "$TOR_URL"; \
-    tar -xf tor-browser-linux64-*.tar.xz; \
-    mv tor-browser /home/user/tor-browser; \
-    rm tor-browser-linux64-*.tar.xz; \
-    chown -R user:user /home/user/tor-browser
 
 # -------------------------------------------------
 # Install noVNC + websockify
@@ -61,7 +46,7 @@ RUN mkdir -p /home/user/.vnc && \
     chown -R user:user /home/user/.vnc
 
 # -------------------------------------------------
-# LOW-RAM Tor Browser tuning (safe)
+# LOW-RAM Firefox tuning (applied after download)
 # -------------------------------------------------
 RUN mkdir -p /home/user/.tor-browser-profile && \
     echo '\
@@ -92,16 +77,14 @@ RUN printf "password\npassword\n\n" | vncpasswd
 EXPOSE 6080
 
 # -------------------------------------------------
-# Start Openbox + Tuned Tor + noVNC
+# Start Openbox + Tor Browser + noVNC
 # -------------------------------------------------
 CMD vncserver :1 -geometry 1280x720 -depth 24 && \
-    sleep 2 && \
-    TOR_SKIP_LAUNCH=1 \
-    /home/user/tor-browser/Browser/firefox \
+    sleep 3 && \
+    torbrowser-launcher \
       --profile /home/user/.tor-browser-profile \
       --disable-gpu \
       --no-sandbox \
-      --disable-dev-shm-usage \
       & \
     /opt/novnc/utils/novnc_proxy \
       --vnc localhost:5901 \
