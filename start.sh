@@ -1,31 +1,27 @@
 #!/bin/bash
 
-# Port set by Render or default to 8080
 PORT=${PORT:-8080}
 PASS="Clownop"
 
-# 1. Create VNC password
+# 1. Setup VNC Password
 mkdir -p /home/toruser/.vnc
 x11vnc -storepasswd "$PASS" /home/toruser/.vnc/passwd
 
-echo "Starting Tor Browser 11.5.0 on Port $PORT..."
-
-# 2. Start Virtual Screen (Xvfb)
-# -ac disables access control for internal services
-Xvfb :99 -screen 0 ${SCREEN_RESOLUTION}x16 -ac &
+# 2. Start Xvfb with lower bit depth (16-bit) to save RAM
+Xvfb :99 -screen 0 ${SCREEN_RESOLUTION}x16 -ac +extension RANDR &
 sleep 2
 
-# 3. Start Window Manager (Openbox)
+# 3. Start Window Manager
 DISPLAY=:99 openbox-session &
+sleep 1
 
-# 4. Start Tor Browser
-# We use --detach so the script can continue to the VNC server
+# 4. Start Tor Browser with "No Remote" to keep it in one process
 cd /home/toruser/tor-browser-linux
-./start-tor-browser.desktop --detach &
+DISPLAY=:99 ./start-tor-browser.desktop --detach --no-remote &
 
-# 5. Start VNC Server with password
-x11vnc -display :99 -forever -shared -bg -rfbport 5900 -rfbauth /home/toruser/.vnc/passwd
+# 5. Start VNC Server with high-performance flags
+# -ncache 10 helps with the laggy feeling on mobile
+x11vnc -display :99 -forever -shared -bg -rfbport 5900 -rfbauth /home/toruser/.vnc/passwd -ncache 10 -speed 5
 
-# 6. Start noVNC Bridge
-echo "Web VNC is now starting. Access via Render URL."
+# 6. Start noVNC
 /app/novnc/utils/novnc_proxy --vnc localhost:5900 --listen $PORT --web /app/novnc
